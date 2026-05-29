@@ -27,12 +27,14 @@ Conversational assistant built on Claude (Anthropic) to help french expats navig
 ```
 Browser (web interface)
         ↓ POST /chat
-FastAPI (api.py)
+FastAPI app   (src/civicai/api/)
         ↓
-LangGraph Agent (agent.py)
-        ├── search_docs  → ChromaDB (RAG on administrative docs)
-        └── web_search   → Tavily (recent information)
+LangGraph     (src/civicai/agent/)
+        ├── search_docs  → ChromaDB (src/civicai/rag/)
+        └── web_search   → Tavily   (src/civicai/tools/)
 ```
+
+Every magic value (model name, similarity threshold, chunk size, paths, collection name) lives in [`src/civicai/config.py`](src/civicai/config.py) — nothing is hardcoded elsewhere.
 
 ### Routing Logic
 
@@ -74,10 +76,11 @@ cp .env.example .env
 # Edit .env with your API keys
 
 # Generate the vector database
-uv run python ingest.py
+uv run python scripts/ingest.py
+# (equivalent to `uv run civicai-ingest`)
 
 # Start the server
-uv run uvicorn api:app --reload
+uv run uvicorn civicai.api.app:app --reload
 ```
 
 Open [http://localhost:8000](http://localhost:8000)
@@ -104,20 +107,43 @@ The ChromaDB vector database is persisted via a Docker volume — it is not rege
 
 ```
 civicai/
-├── docs/                    # Administrative documents
-│   ├── visa_touriste.txt
-│   ├── permis_travail.txt
-│   └── carte_residence.txt
-├── static/
-│   └── index.html           # Web interface
-├── agent.py                 # LangGraph agent
-├── api.py                   # FastAPI backend
-├── ingest.py                # RAG ingestion → ChromaDB
+├── src/civicai/
+│   ├── config.py            # Single source for every constant
+│   ├── llm/client.py        # Anthropic client (lazy singleton)
+│   ├── rag/
+│   │   ├── embeddings.py    # SentenceTransformer wrapper
+│   │   ├── vectorstore.py   # ChromaDB client + collection helpers
+│   │   └── ingest.py        # Chunk + embed + store pipeline
+│   ├── tools/
+│   │   ├── definitions.py   # Anthropic tool schemas
+│   │   ├── search_docs.py   # Local RAG retrieval + 0.5 threshold
+│   │   ├── web_search.py    # Tavily wrapper
+│   │   └── dispatcher.py    # name → handler map
+│   ├── agent/
+│   │   ├── state.py         # AgentState TypedDict
+│   │   ├── nodes.py         # call_claude, run_tools, should_continue
+│   │   └── graph.py         # build_graph + ask()
+│   └── api/
+│       ├── app.py           # create_app() factory
+│       ├── routes.py        # /, /chat, /health
+│       └── schemas.py       # Pydantic models
+├── scripts/ingest.py        # CLI shim → civicai.rag.ingest
+├── tests/                   # Mocked pytest suite (no real API calls)
+├── docs/                    # Administrative knowledge base (.txt)
+├── static/index.html        # Vanilla JS chat UI
 ├── Dockerfile               # Multi-stage build
 ├── docker-compose.yml
-├── pyproject.toml
+├── pyproject.toml           # hatch wheel target src/civicai
 └── .env.example
 ```
+
+### Running the test suite
+
+```bash
+uv run pytest
+```
+
+The suite uses mocks for Anthropic, Tavily, ChromaDB, and the embedding model — it runs in seconds and never makes a network call.
 
 ---
 
@@ -127,7 +153,7 @@ civicai/
 2. Re-run the ingestion:
 
 ```bash
-uv run python ingest.py
+uv run python scripts/ingest.py
 # or in Docker:
 docker compose up --build
 ```

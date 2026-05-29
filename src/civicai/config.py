@@ -12,7 +12,9 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv()
+# override=True so an empty shell var (e.g. `export ANTHROPIC_API_KEY=`)
+# doesn't shadow a real value in .env.
+load_dotenv(override=True)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
