@@ -6,5 +6,5 @@ services:
     env_file:
       - .env
     volumes:
-      # Persiste la base vectorielle entre les redémarrages
+      # Persist the vector store across restarts
       - ./chroma_db:/app/chroma_db
