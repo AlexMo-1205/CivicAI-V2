@@ -1,8 +1,13 @@
-"""API smoke test: /chat returns correct schema and fallback path triggers Tavily."""
-import importlib
+"""API smoke test: /chat returns the right schema and the fallback path fires."""
 from unittest.mock import MagicMock
 
 from fastapi.testclient import TestClient
+
+from civicai.agent import graph as graph_mod
+from civicai.agent import nodes as nodes_mod
+from civicai.api.app import app
+from civicai.tools import search_docs as sd_mod
+from civicai.tools import web_search as ws_mod
 
 
 class _Block:
@@ -23,37 +28,24 @@ class _Resp:
         self.content = content
 
 
-def _fresh_modules():
-    for name in ("api", "agent"):
-        if name in importlib.sys.modules:
-            del importlib.sys.modules[name]
-    agent = importlib.import_module("agent")
-    api = importlib.import_module("api")
-    return agent, api
-
-
-def test_chat_endpoint_triggers_web_search_below_threshold(stub_external_modules, monkeypatch):
-    agent, api = _fresh_modules()
-
-    # Vector store returns low scores -> fallback path
+def test_chat_triggers_web_search_below_threshold(monkeypatch):
+    # Local RAG returns low scores -> fallback message is returned to Claude
     fake_collection = MagicMock()
     fake_collection.query.return_value = {
         "documents": [["doc"]],
         "metadatas": [[{"source": "s.txt"}]],
-        "distances": [[0.9]],  # score 0.1 -> avg 0.1 < 0.5
+        "distances": [[0.9]],  # score 0.1, avg 0.1 (< 0.5)
     }
-    monkeypatch.setattr(agent, "collection", fake_collection)
+    monkeypatch.setattr(sd_mod, "get_collection", lambda: fake_collection)
+    embedder = MagicMock()
+    embedder.encode.return_value.tolist.return_value = [0.0]
+    monkeypatch.setattr(sd_mod, "get_embedder", lambda: embedder)
 
-    fake_embedder = MagicMock()
-    fake_embedder.encode.return_value.tolist.return_value = [0.0]
-    monkeypatch.setattr(agent, "embedder", fake_embedder)
-
-    # Tavily fallback
     fake_tavily = MagicMock()
     fake_tavily.search.return_value = {
-        "results": [{"title": "Web Hit", "url": "https://t", "content": "info"}]
+        "results": [{"title": "Hit", "url": "https://t", "content": "info"}],
     }
-    monkeypatch.setattr(agent, "tavily", fake_tavily)
+    monkeypatch.setattr(ws_mod, "get_tavily", lambda: fake_tavily)
 
     # Scripted Claude turns: search_docs -> web_search -> final text
     turns = [
@@ -65,24 +57,24 @@ def test_chat_endpoint_triggers_web_search_below_threshold(stub_external_modules
     ]
     fake_claude = MagicMock()
     fake_claude.messages.create.side_effect = turns
-    monkeypatch.setattr(agent, "claude", fake_claude)
+    monkeypatch.setattr(nodes_mod, "get_claude", lambda: fake_claude)
 
-    client = TestClient(api.app)
+    # Make sure we re-compile the graph against the patched node closures
+    graph_mod._compiled_app.cache_clear()
+
+    client = TestClient(app)
     resp = client.post("/chat", json={"question": "I need a Thai visa"})
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert set(body.keys()) == {"answer"}
     assert body["answer"] == "Final grounded answer."
 
-    # The fallback actually fired
     fake_tavily.search.assert_called_once()
-    # Claude was driven for all three scripted turns
     assert fake_claude.messages.create.call_count == 3
 
 
-def test_health_endpoint(stub_external_modules):
-    _, api = _fresh_modules()
-    client = TestClient(api.app)
+def test_health_endpoint():
+    client = TestClient(app)
     resp = client.get("/health")
     assert resp.status_code == 200
     assert resp.json() == {"status": "ok", "service": "CivicAI"}
