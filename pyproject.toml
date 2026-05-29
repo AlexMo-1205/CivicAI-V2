@@ -1,0 +1,18 @@
+[project]
+name = "civicai"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "anthropic>=0.93.0",
+    "chromadb>=1.5.7",
+    "fastapi>=0.135.3",
+    "langchain-anthropic>=1.4.0",
+    "langgraph>=1.1.6",
+    "pymupdf>=1.27.2.2",
+    "python-dotenv>=1.2.2",
+    "sentence-transformers>=5.4.0",
+    "tavily-python>=0.7.23",
+    "uvicorn>=0.44.0",
+]
