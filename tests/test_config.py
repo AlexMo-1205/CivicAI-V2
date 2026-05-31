@@ -21,7 +21,7 @@ def test_settings_constants_are_locked():
 def test_retrieval_pipeline_settings():
     assert SETTINGS.reranker_model == "BAAI/bge-reranker-v2-m3"
     assert SETTINGS.retrieve_top_k == 40
-    assert SETTINGS.rerank_top_n == 6
+    assert SETTINGS.rerank_top_n == 8
     # Phase 3 sweep replaces this placeholder.
     assert 0.0 <= SETTINGS.rerank_routing_threshold <= 1.0
 

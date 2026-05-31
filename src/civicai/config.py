@@ -79,7 +79,10 @@ SETTINGS = Settings(
     db_dir=PROJECT_ROOT / "chroma_db",
 
     retrieve_top_k=40,                   # wide net for the dense recall pass
-    rerank_top_n=6,                      # what the LLM actually sees
+    # rerank_top_n bumped 6 -> 8: two adversarial ground-truth facts (penalty
+    # numbers, condo-vs-land distinction) sit at ranks 7-8 after reranking on
+    # a 21-doc corpus, so top_n<8 starves the LLM of the corrective context.
+    rerank_top_n=8,
     reranker_model="BAAI/bge-reranker-v2-m3",
 
     similarity_threshold=0.5,
