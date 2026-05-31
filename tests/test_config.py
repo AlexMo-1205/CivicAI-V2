@@ -10,6 +10,7 @@ def test_settings_constants_are_locked():
     assert SETTINGS.embed_dim == 1024
     assert SETTINGS.chunk_size == 500
     assert SETTINGS.chunk_overlap == 50
+    assert SETTINGS.min_chunk_split_chars == 2800
     # Collection name encodes model+dim so a model swap won't mix spaces.
     assert SETTINGS.collection_name == "civicai_bge_m3_1024"
     assert SETTINGS.similarity_threshold == 0.5

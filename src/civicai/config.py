@@ -37,6 +37,7 @@ class Settings:
     embed_dim: int
     chunk_size: int
     chunk_overlap: int
+    min_chunk_split_chars: int  # docs at/under this size stay as a single chunk
     collection_name: str
     db_dir: Path
 
@@ -73,6 +74,10 @@ SETTINGS = Settings(
     embed_dim=1024,
     chunk_size=500,
     chunk_overlap=50,
+    # Short procedural docs (steps + costs + penalties) must stay in one chunk —
+    # splitting orphans the corrective answer from its context.
+    # ~700 tokens at the chars/4 heuristic.
+    min_chunk_split_chars=2800,
     # Collection name includes the dim so a future model change can't accidentally
     # mix two embedding spaces in the same collection.
     collection_name="civicai_bge_m3_1024",

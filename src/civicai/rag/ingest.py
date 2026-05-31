@@ -9,7 +9,22 @@ from civicai.rag.vectorstore import reset_collection
 
 
 def chunk_text(text: str, source: str) -> list[dict]:
-    """Slide a fixed window across `text` with overlap."""
+    """Slide a fixed window across `text` with overlap.
+
+    Small-doc guard: if the document is at or below
+    `SETTINGS.min_chunk_split_chars`, index it as a SINGLE chunk. Short
+    procedural docs must keep their steps, costs and penalties together —
+    splitting them orphans the corrective answer from its context (the
+    adv-03 90-day-report case made this concrete: the PÉNALITÉS/COÛT lines
+    landed in a second chunk that the reranker never surfaced).
+    """
+    text_stripped = text.strip()
+    if not text_stripped:
+        return []
+
+    if len(text_stripped) <= SETTINGS.min_chunk_split_chars:
+        return [{"text": text_stripped, "source": source, "chunk_id": 0}]
+
     chunks: list[dict] = []
     start = 0
     idx = 0
