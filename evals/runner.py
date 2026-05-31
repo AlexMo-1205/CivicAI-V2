@@ -395,6 +395,13 @@ def main() -> None:
         help="Seconds to sleep between scored items (rate-limit safety).",
     )
     parser.add_argument("--judge-model", default=SETTINGS.model)
+    parser.add_argument(
+        "--no-score",
+        action="store_true",
+        help="Skip Phase 2 (scoring). Use evals/scorer.py separately for "
+        "the scoring pass — it doesn't import civicai.rag, so it doesn't "
+        "hold bge-m3 + reranker in memory while RAGAS runs.",
+    )
     args = parser.parse_args()
 
     _require_anthropic_key()
@@ -447,7 +454,13 @@ def main() -> None:
     keep_ids = {it["id"] for it in items}
     records = [r for r in records if r["id"] in keep_ids]
 
-    # Phase 2 — scoring (resumable)
+    # Phase 2 — scoring (resumable). Skippable: prefer evals/scorer.py which
+    # decouples from civicai.rag imports and avoids the OOM that previously
+    # killed this process on the larger dataset.
+    if args.no_score:
+        print("\n[--no-score] Skipping scoring phase. Run `uv run python "
+              "evals/scorer.py` to score the records.")
+        return
     print("\n=== Phase 2: scoring pass (one item per evaluate() call) ===")
     results = scoring_pass(records, judge_wrap, emb_wrap, sleep_s=args.rps_sleep)
     results = [r for r in results if r["id"] in keep_ids]
