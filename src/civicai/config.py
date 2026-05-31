@@ -34,6 +34,7 @@ class Settings:
 
     # Embeddings + vector store
     embed_model: str
+    embed_dim: int
     chunk_size: int
     chunk_overlap: int
     collection_name: str
@@ -60,10 +61,15 @@ SETTINGS = Settings(
     model="claude-sonnet-4-5",
     max_tokens=4096,
 
-    embed_model="all-MiniLM-L6-v2",
+    # bge-m3: multilingual (100+ languages), 1024-dim dense vectors.
+    # Vectors are L2-normalized and the ChromaDB collection uses cosine space.
+    embed_model="BAAI/bge-m3",
+    embed_dim=1024,
     chunk_size=500,
     chunk_overlap=50,
-    collection_name="civicai",
+    # Collection name includes the dim so a future model change can't accidentally
+    # mix two embedding spaces in the same collection.
+    collection_name="civicai_bge_m3_1024",
     db_dir=PROJECT_ROOT / "chroma_db",
 
     similarity_threshold=0.5,

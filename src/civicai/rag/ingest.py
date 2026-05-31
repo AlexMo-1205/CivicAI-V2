@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from civicai.config import SETTINGS
-from civicai.rag.embeddings import get_embedder
+from civicai.rag.embeddings import get_embeddings
 from civicai.rag.vectorstore import reset_collection
 
 
@@ -49,11 +49,11 @@ def ingest_all_docs(docs_dir: Path | None = None) -> int:
         print(f"  -> {len(text)} chars, {len(chunks)} chunks")
         all_chunks.extend(chunks)
 
-    print(f"\nTotal: {len(all_chunks)} chunks to embed...")
+    print(f"\nTotal: {len(all_chunks)} chunks to embed with {SETTINGS.embed_model}...")
 
-    embedder = get_embedder()
+    embeddings_provider = get_embeddings()
     texts = [c["text"] for c in all_chunks]
-    embeddings = embedder.encode(texts, show_progress_bar=True).tolist()
+    embeddings = embeddings_provider.embed_documents(texts)
 
     collection = reset_collection()
     collection.add(
@@ -68,6 +68,6 @@ def ingest_all_docs(docs_dir: Path | None = None) -> int:
 
     stored = collection.count()
     print(f"\nVector store ready at {SETTINGS.db_dir}/")
-    print(f"  Collection: '{SETTINGS.collection_name}'")
+    print(f"  Collection: '{SETTINGS.collection_name}' (dim={embeddings_provider.dim})")
     print(f"  {stored} chunks stored")
     return stored

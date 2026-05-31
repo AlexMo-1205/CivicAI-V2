@@ -6,10 +6,12 @@ from civicai.config import SETTINGS, build_system_prompt
 
 def test_settings_constants_are_locked():
     assert SETTINGS.model == "claude-sonnet-4-5"
-    assert SETTINGS.embed_model == "all-MiniLM-L6-v2"
+    assert SETTINGS.embed_model == "BAAI/bge-m3"
+    assert SETTINGS.embed_dim == 1024
     assert SETTINGS.chunk_size == 500
     assert SETTINGS.chunk_overlap == 50
-    assert SETTINGS.collection_name == "civicai"
+    # Collection name encodes model+dim so a model swap won't mix spaces.
+    assert SETTINGS.collection_name == "civicai_bge_m3_1024"
     assert SETTINGS.similarity_threshold == 0.5
     assert SETTINGS.default_n_results == 5
     assert SETTINGS.max_tokens == 4096

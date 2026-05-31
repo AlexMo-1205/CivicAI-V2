@@ -15,10 +15,12 @@ def _fake_query_results(distances):
     }
 
 
-def _fake_embedder():
-    embedder = MagicMock()
-    embedder.encode.return_value.tolist.return_value = [0.0]
-    return embedder
+def _fake_embeddings():
+    """Stub EmbeddingProvider — returns a deterministic 1-dim vector."""
+    embeddings = MagicMock()
+    embeddings.embed_query.return_value = [0.0]
+    embeddings.embed_documents.return_value = [[0.0]]
+    return embeddings
 
 
 def test_below_threshold_triggers_fallback_message(monkeypatch):
@@ -26,7 +28,7 @@ def test_below_threshold_triggers_fallback_message(monkeypatch):
     # Distances 0.7, 0.8 -> scores 0.3, 0.2 -> avg 0.25 (< 0.5)
     fake_collection.query.return_value = _fake_query_results([0.7, 0.8])
     monkeypatch.setattr(sd_mod, "get_collection", lambda: fake_collection)
-    monkeypatch.setattr(sd_mod, "get_embedder", _fake_embedder)
+    monkeypatch.setattr(sd_mod, "get_embeddings", _fake_embeddings)
 
     out = sd_mod.search_docs("anything")
     assert "web_search" in out
@@ -38,7 +40,7 @@ def test_above_threshold_returns_formatted_docs(monkeypatch):
     # Distance 0.1 -> score 0.9 (>= 0.5)
     fake_collection.query.return_value = _fake_query_results([0.1])
     monkeypatch.setattr(sd_mod, "get_collection", lambda: fake_collection)
-    monkeypatch.setattr(sd_mod, "get_embedder", _fake_embedder)
+    monkeypatch.setattr(sd_mod, "get_embeddings", _fake_embeddings)
 
     out = sd_mod.search_docs("visa")
     assert "doc-0" in out

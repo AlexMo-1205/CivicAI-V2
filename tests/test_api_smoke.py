@@ -37,9 +37,9 @@ def test_chat_triggers_web_search_below_threshold(monkeypatch):
         "distances": [[0.9]],  # score 0.1, avg 0.1 (< 0.5)
     }
     monkeypatch.setattr(sd_mod, "get_collection", lambda: fake_collection)
-    embedder = MagicMock()
-    embedder.encode.return_value.tolist.return_value = [0.0]
-    monkeypatch.setattr(sd_mod, "get_embedder", lambda: embedder)
+    embeddings = MagicMock()
+    embeddings.embed_query.return_value = [0.0]
+    monkeypatch.setattr(sd_mod, "get_embeddings", lambda: embeddings)
 
     fake_tavily = MagicMock()
     fake_tavily.search.return_value = {
