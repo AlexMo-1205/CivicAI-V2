@@ -40,8 +40,14 @@ class Settings:
     collection_name: str
     db_dir: Path
 
+    # Retrieval pipeline
+    retrieve_top_k: int          # dense candidates pulled from Chroma
+    rerank_top_n: int            # kept after cross-encoder rerank
+    reranker_model: str
+
     # RAG routing
-    similarity_threshold: float
+    similarity_threshold: float          # legacy dense-only threshold, kept for back-compat
+    rerank_routing_threshold: float      # top reranked (sigmoid) score below which we fall back to web_search
     default_n_results: int
 
     # External search
@@ -72,7 +78,13 @@ SETTINGS = Settings(
     collection_name="civicai_bge_m3_1024",
     db_dir=PROJECT_ROOT / "chroma_db",
 
+    retrieve_top_k=40,                   # wide net for the dense recall pass
+    rerank_top_n=6,                      # what the LLM actually sees
+    reranker_model="BAAI/bge-reranker-v2-m3",
+
     similarity_threshold=0.5,
+    # PLACEHOLDER — Phase 3 (RAGAS sweep) replaces this with the eval-selected value.
+    rerank_routing_threshold=0.5,
     default_n_results=5,
 
     tavily_api_key=_env("TAVILY_API_KEY"),

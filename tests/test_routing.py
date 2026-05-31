@@ -1,51 +1,94 @@
-"""Unit test: similarity-threshold routing in search_docs + dispatcher behavior."""
+"""Routing tests: web_search fallback fires on top reranked score below threshold."""
 from unittest.mock import MagicMock
 
+from civicai.config import SETTINGS
+from civicai.rag.retrieval import Candidate
 from civicai.tools import dispatcher
 from civicai.tools import search_docs as sd_mod
 from civicai.tools import web_search as ws_mod
 
 
-def _fake_query_results(distances):
-    n = len(distances)
-    return {
-        "documents": [[f"doc-{i}" for i in range(n)]],
-        "metadatas": [[{"source": f"s{i}.txt"} for i in range(n)]],
-        "distances": [distances],
-    }
+def _candidates_with_rerank_scores(scores):
+    """Stub Candidate list pre-scored by the reranker (already sorted desc)."""
+    out = []
+    for i, s in enumerate(sorted(scores, reverse=True)):
+        c = Candidate(
+            text=f"doc-{i}",
+            source=f"s{i}.txt",
+            chunk_id=i,
+            dense_score=0.5,
+            rerank_score=float(s),
+        )
+        out.append(c)
+    return out
 
 
-def _fake_embeddings():
-    """Stub EmbeddingProvider — returns a deterministic 1-dim vector."""
-    embeddings = MagicMock()
-    embeddings.embed_query.return_value = [0.0]
-    embeddings.embed_documents.return_value = [[0.0]]
-    return embeddings
+def _patch_pipeline(monkeypatch, reranked: list[Candidate]):
+    """Stub the whole retrieve -> rerank pipeline to return `reranked` as-is."""
+    # Retrieval returns the same set unranked; reranker just hands it back sorted.
+    monkeypatch.setattr(sd_mod, "retrieve", lambda query, k: reranked)
+    fake_reranker = MagicMock()
+    fake_reranker.rerank.return_value = reranked
+    monkeypatch.setattr(sd_mod, "get_reranker", lambda: fake_reranker)
+    return fake_reranker
 
 
 def test_below_threshold_triggers_fallback_message(monkeypatch):
-    fake_collection = MagicMock()
-    # Distances 0.7, 0.8 -> scores 0.3, 0.2 -> avg 0.25 (< 0.5)
-    fake_collection.query.return_value = _fake_query_results([0.7, 0.8])
-    monkeypatch.setattr(sd_mod, "get_collection", lambda: fake_collection)
-    monkeypatch.setattr(sd_mod, "get_embeddings", _fake_embeddings)
+    # Top reranked score 0.30 -> below the 0.5 threshold (placeholder)
+    reranked = _candidates_with_rerank_scores([0.30, 0.25, 0.10])
+    _patch_pipeline(monkeypatch, reranked)
 
     out = sd_mod.search_docs("anything")
-    assert "web_search" in out
     assert "Aucun document pertinent" in out
+    assert "web_search" in out
+    # The fallback message reports the top score, not an average
+    assert "0.3" in out
 
 
 def test_above_threshold_returns_formatted_docs(monkeypatch):
-    fake_collection = MagicMock()
-    # Distance 0.1 -> score 0.9 (>= 0.5)
-    fake_collection.query.return_value = _fake_query_results([0.1])
-    monkeypatch.setattr(sd_mod, "get_collection", lambda: fake_collection)
-    monkeypatch.setattr(sd_mod, "get_embeddings", _fake_embeddings)
+    reranked = _candidates_with_rerank_scores([0.92, 0.81, 0.66])
+    _patch_pipeline(monkeypatch, reranked)
 
     out = sd_mod.search_docs("visa")
     assert "doc-0" in out
     assert "Source: s0.txt" in out
     assert "web_search" not in out
+
+
+def test_threshold_uses_top_score_not_average(monkeypatch):
+    """A single very high score should NOT be drowned out by lower neighbors."""
+    # Mean of these is well below 0.5, but the top is 0.95 — should NOT fall back.
+    reranked = _candidates_with_rerank_scores([0.95, 0.20, 0.10, 0.05])
+    _patch_pipeline(monkeypatch, reranked)
+
+    out = sd_mod.search_docs("specific question")
+    assert "web_search" not in out
+    assert "doc-0" in out
+
+
+def test_empty_retrieval_falls_back(monkeypatch):
+    monkeypatch.setattr(sd_mod, "retrieve", lambda query, k: [])
+    out = sd_mod.search_docs("anything")
+    assert "Aucun document pertinent" in out
+
+
+def test_search_docs_passes_config_top_k_and_top_n(monkeypatch):
+    captured = {}
+
+    def fake_retrieve(query, k):
+        captured["k"] = k
+        return _candidates_with_rerank_scores([0.9])
+
+    fake_reranker = MagicMock()
+    fake_reranker.rerank.return_value = _candidates_with_rerank_scores([0.9])
+
+    monkeypatch.setattr(sd_mod, "retrieve", fake_retrieve)
+    monkeypatch.setattr(sd_mod, "get_reranker", lambda: fake_reranker)
+
+    sd_mod.search_docs("q")
+    assert captured["k"] == SETTINGS.retrieve_top_k
+    _, kwargs = fake_reranker.rerank.call_args[:2], fake_reranker.rerank.call_args.kwargs
+    assert kwargs["top_n"] == SETTINGS.rerank_top_n
 
 
 def test_web_search_uses_tavily_client(monkeypatch):
@@ -65,6 +108,7 @@ def test_dispatcher_unknown_tool():
 
 
 def test_dispatcher_routes_to_handler(monkeypatch):
-    monkeypatch.setitem(dispatcher.HANDLERS, "search_docs",
-                        lambda **kw: f"stub:{kw['query']}")
+    monkeypatch.setitem(
+        dispatcher.HANDLERS, "search_docs", lambda **kw: f"stub:{kw['query']}"
+    )
     assert dispatcher.run_tool("search_docs", {"query": "abc"}) == "stub:abc"

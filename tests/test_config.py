@@ -18,6 +18,14 @@ def test_settings_constants_are_locked():
     assert SETTINGS.tavily_max_results == 5
 
 
+def test_retrieval_pipeline_settings():
+    assert SETTINGS.reranker_model == "BAAI/bge-reranker-v2-m3"
+    assert SETTINGS.retrieve_top_k == 40
+    assert SETTINGS.rerank_top_n == 6
+    # Phase 3 sweep replaces this placeholder.
+    assert 0.0 <= SETTINGS.rerank_routing_threshold <= 1.0
+
+
 def test_settings_paths_anchored_to_project_root():
     assert isinstance(SETTINGS.db_dir, Path)
     assert SETTINGS.db_dir.name == "chroma_db"
