@@ -1,6 +1,6 @@
 # 🏛️ CivicAI — Thailand Administrative Assistant
 
-Conversational assistant built on Claude (Anthropic) to help french expats navigate administrative procedures in Thailand. Multilingual hybrid RAG (French queries → French/Thai administrative docs) with a cross-encoder reranker and an empirically-tuned web-search fallback.
+Conversational assistant built on Claude (Anthropic) to help French expats navigate administrative procedures in Thailand. Multilingual hybrid RAG (French queries → French/Thai administrative docs) with a cross-encoder reranker and an empirically-tuned web-search fallback.
 
 ## Demo
 
@@ -21,7 +21,7 @@ Conversational assistant built on Claude (Anthropic) to help french expats navig
 | Evaluation | **RAGAS** (Claude judge + bge-m3 embeddings, no OpenAI dependency) |
 | Backend | FastAPI + Uvicorn |
 | Frontend | Vanilla HTML/CSS/JS |
-| Deployment | Docker + Docker Compose |
+| Containerization | Docker + Docker Compose — **2.09 GB image** (CPU-only torch, bundled CUDA stripped → −76% vs default) |
 
 ---
 
@@ -57,7 +57,7 @@ Every magic value (model name, threshold, top_k/top_n, chunk size, paths, collec
 - **Confidence-aware fallback** — automatic web search when the corpus doesn't cover the question.
 - **Conversation history** — Claude remembers prior turns.
 - **Web interface** — chat with question suggestions.
-- **Deployable** — multi-stage Dockerfile + HF model cache volume.
+- **Containerized** — multi-stage Dockerfile (2.09 GB, CPU-only torch) + HF model cache volume; runs locally with `docker compose up`.
 
 ---
 
@@ -95,7 +95,7 @@ Open [http://localhost:8000](http://localhost:8000)
 
 ---
 
-## Docker Deployment
+## Run in Docker
 
 ```bash
 # Build and start
@@ -107,10 +107,12 @@ docker compose down
 
 The app is accessible at [http://localhost:8000](http://localhost:8000).
 
+**Image size: 2.09 GB.** Down from 8.66 GB by routing `torch` through PyTorch's CPU wheel index (`[tool.uv.sources]` in `pyproject.toml`) — the default `torch` wheel ships ~5 GB of bundled CUDA runtime that this project never uses (bge-m3 and the reranker run on CPU). Stripping it gave **−76%** with no behavior change.
+
 Two persistent volumes (declared in `docker-compose.yml`):
 
 - `./chroma_db` → `/app/chroma_db` — vector store, regenerated only if `docs/` changes.
-- `./.hf_cache` → `/root/.cache/huggingface` — bge-m3 + reranker weights (~3 GB total) downloaded once on first start, reused across restarts.
+- `./.hf_cache` → `/root/.cache/huggingface` — bge-m3 + reranker weights (~3 GB total) downloaded once on first start, reused across restarts (cold start ~5 min, restart ~22 s).
 
 ---
 
@@ -185,9 +187,11 @@ The evaluation harness in `evals/` measures retrieval+generation quality with [R
 | Metric | Mean | Median |
 |---|---|---|
 | faithfulness | **0.728** | 0.769 |
-| answer_relevancy | **0.851** | 0.866 |
+| answer_relevancy | **0.851** † | 0.866 |
 | context_precision | **0.911** | 1.000 |
 | context_recall | **0.968** | 1.000 |
+
+† Note the **RAGAS `answer_relevancy` blind spot** described in *Known limitations* below — individual items that openly disclose missing info can score near 0 even when the answer is plainly relevant; this is a metric artifact, not a quality drop.
 
 > **Caveat — measurement timing.** The headline above was scored *before* the
 > P4 anti-hallucination prompt hardening. The hardening itself was validated
@@ -286,10 +290,8 @@ Zero dependencies, zero build step. The interface is simple and statically deplo
 ## Roadmap
 
 - [ ] Answerability classifier on top reranked chunk (raise the ~90% routing ceiling)
-- [ ] System-prompt hardening against figures not in retrieved context (close the tax-bracket hallucination)
 - [ ] PDF support in addition to txt files
 - [ ] Response streaming (WebSockets)
-- [ ] GCP Cloud Run deployment
 - [ ] User authentication
 
 ---
