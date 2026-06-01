@@ -91,8 +91,12 @@ SETTINGS = Settings(
     reranker_model="BAAI/bge-reranker-v2-m3",
 
     similarity_threshold=0.5,
-    # PLACEHOLDER — Phase 3 (RAGAS sweep) replaces this with the eval-selected value.
-    rerank_routing_threshold=0.5,
+    # Selected by the P3c RAGAS threshold sweep over the eval dataset.
+    # At T=0.67 routing accuracy is 87% with ZERO ungrounded-local errors
+    # (fallback→local = 0). Trade-off favors faithfulness over latency: 9
+    # multi-doc or shallow-score local items are routed to web_search where
+    # the answer is still produced correctly. See evals/runs/p3c_sweep_report_*.md.
+    rerank_routing_threshold=0.67,
     default_n_results=5,
 
     tavily_api_key=_env("TAVILY_API_KEY"),
