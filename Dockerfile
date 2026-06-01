@@ -29,6 +29,11 @@ ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH="/app/src"
 
+# Cache bge-m3 (~2 GB) + bge-reranker-v2-m3 (~1 GB) under /root/.cache/huggingface.
+# docker-compose mounts ./.hf_cache there so the ~3 GB download happens once
+# on first start and is reused across container restarts.
+ENV HF_HOME=/root/.cache/huggingface
+
 EXPOSE 8000
 
 # Build the vector store, then boot the API.
