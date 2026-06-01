@@ -189,6 +189,14 @@ The evaluation harness in `evals/` measures retrieval+generation quality with [R
 | context_precision | **0.911** | 1.000 |
 | context_recall | **0.968** | 1.000 |
 
+> **Caveat — measurement timing.** The headline above was scored *before* the
+> P4 anti-hallucination prompt hardening. The hardening itself was validated
+> on a targeted 10-item before/after set (see
+> `evals/runs/p4_validation_results.jsonl` and `evals/p4_validate.py`), not by
+> re-running the full 73-item eval. The substantive change — the tax-bracket
+> fabrication is gone, retrieval-side metrics unchanged — is real; the
+> aggregate would shift by single-digit-percent noise.
+
 ### Routing accuracy at the selected threshold (T = 0.67)
 
 | | |
@@ -226,7 +234,9 @@ The evaluation harness exposed three operating limits, all of which are characte
 
 - **Threshold T = 0.67 was chosen to drive high-harm errors (ungrounded local answers) to zero**, trading ~3 points of raw accuracy for safety. At T=0.67 the sweep reports `fallback→local = 0` and `local→web = 9`; the 9 re-routed locals are low-harm (web still produces a correct answer, or the multi-doc local answer exists but the reranker can't see across docs). The full sweep is in `evals/runs/p3c_sweep_report_*.md`.
 
-- **The eval caught one generation-side issue** — on a tax-rapatriement multi-doc question the model fabricated a full progressive PIT bracket table absent from the corpus (faithfulness 0.068). RAGAS flagged it correctly. Logged here rather than patched: candidate fix is to tighten the system prompt against stating figures not in retrieved context. Frame this as the harness doing its job.
+- **The eval caught a generation-side hallucination, the prompt patched it, the patch was validated.** On a tax-rapatriement multi-doc question the model fabricated a full progressive PIT bracket table absent from the corpus (faithfulness 0.068). RAGAS flagged it correctly. Fix: added a "Règle d'ancrage CRITIQUE" block to the system prompt — never state a figure, fee, rate, percentage, deadline or date not present in retrieved context; never fill from prior knowledge; if a specific figure is missing, say so plainly instead of inventing one. Validated on a targeted 10-item before/after set (2 hallucination cases + 6 high-faithfulness locals as a regression check + 2 adversarials): the fabricated bracket table is gone, the high-faith locals stayed within noise, the adversarials still correctly contradict their false premise. Detect → fix → revalidate, the harness doing its job.
+
+- **RAGAS `answer_relevancy` blind spot — engineering judgment over score-chasing.** The same anti-hallucination prompt makes the model say things like "ce détail précis n'est pas dans ma base" when a specific figure isn't retrievable. RAGAS's `answer_relevancy` metric uses a reverse-question step that misfires on those transparent gap-disclosures, producing scores near 0 on responses that are plainly relevant and correct (`tax-03` reproduces this: rel 0.000, faithfulness 0.875 on a substantively right answer). We **kept the transparent behavior** — an administrative assistant SHOULD tell users when a specific figure isn't in its sources — and documented the metric limitation, rather than degrading the product to chase the score. Optimize the product, not the metric.
 
 ---
 
