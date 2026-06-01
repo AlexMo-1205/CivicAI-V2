@@ -10,7 +10,12 @@ COPY uv.lock* .
 COPY README.md .
 COPY src/ ./src/
 
-RUN uv sync --frozen --no-dev
+# Install into /app/.venv. Use the CPU torch index declared in pyproject.toml
+# (no nvidia-* / triton wheels — bge-m3 and the reranker run on CPU).
+# Purge the uv cache in the SAME layer so it isn't frozen into the intermediate
+# image; only /app/.venv is copied into the runtime stage.
+RUN uv sync --frozen --no-dev \
+    && rm -rf /root/.cache/uv
 
 
 # ── Stage 2: runtime ─────────────────────────────────────────────────────────
