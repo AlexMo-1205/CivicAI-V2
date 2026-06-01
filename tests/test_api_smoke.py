@@ -29,17 +29,17 @@ class _Resp:
 
 
 def test_chat_triggers_web_search_below_threshold(monkeypatch):
-    # Local RAG returns low scores -> fallback message is returned to Claude
-    fake_collection = MagicMock()
-    fake_collection.query.return_value = {
-        "documents": [["doc"]],
-        "metadatas": [[{"source": "s.txt"}]],
-        "distances": [[0.9]],  # score 0.1, avg 0.1 (< 0.5)
-    }
-    monkeypatch.setattr(sd_mod, "get_collection", lambda: fake_collection)
-    embedder = MagicMock()
-    embedder.encode.return_value.tolist.return_value = [0.0]
-    monkeypatch.setattr(sd_mod, "get_embedder", lambda: embedder)
+    # Stub the retrieve+rerank pipeline so top reranked score is below threshold
+    from civicai.rag.retrieval import Candidate
+
+    low_score = Candidate(
+        text="irrelevant", source="s.txt", chunk_id=0,
+        dense_score=0.5, rerank_score=0.1,
+    )
+    monkeypatch.setattr(sd_mod, "retrieve", lambda query, k: [low_score])
+    fake_reranker = MagicMock()
+    fake_reranker.rerank.return_value = [low_score]
+    monkeypatch.setattr(sd_mod, "get_reranker", lambda: fake_reranker)
 
     fake_tavily = MagicMock()
     fake_tavily.search.return_value = {

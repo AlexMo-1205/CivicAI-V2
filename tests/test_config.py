@@ -6,14 +6,25 @@ from civicai.config import SETTINGS, build_system_prompt
 
 def test_settings_constants_are_locked():
     assert SETTINGS.model == "claude-sonnet-4-5"
-    assert SETTINGS.embed_model == "all-MiniLM-L6-v2"
+    assert SETTINGS.embed_model == "BAAI/bge-m3"
+    assert SETTINGS.embed_dim == 1024
     assert SETTINGS.chunk_size == 500
     assert SETTINGS.chunk_overlap == 50
-    assert SETTINGS.collection_name == "civicai"
+    assert SETTINGS.min_chunk_split_chars == 2800
+    # Collection name encodes model+dim so a model swap won't mix spaces.
+    assert SETTINGS.collection_name == "civicai_bge_m3_1024"
     assert SETTINGS.similarity_threshold == 0.5
     assert SETTINGS.default_n_results == 5
     assert SETTINGS.max_tokens == 4096
     assert SETTINGS.tavily_max_results == 5
+
+
+def test_retrieval_pipeline_settings():
+    assert SETTINGS.reranker_model == "BAAI/bge-reranker-v2-m3"
+    assert SETTINGS.retrieve_top_k == 40
+    assert SETTINGS.rerank_top_n == 8
+    # Phase 3 sweep replaces this placeholder.
+    assert 0.0 <= SETTINGS.rerank_routing_threshold <= 1.0
 
 
 def test_settings_paths_anchored_to_project_root():

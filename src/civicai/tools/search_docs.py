@@ -1,46 +1,47 @@
 """Local RAG retrieval tool.
 
-Owns the similarity-threshold routing rule: if the average score across the
-top-N results is below `SETTINGS.similarity_threshold`, return a fallback
-message that prompts Claude to call `web_search` next.
+Pipeline: dense `retrieve` (top_k) -> cross-encoder `rerank` (top_n) -> route.
+
+Routing rule (the one the eval harness tunes): if the TOP reranked
+sigmoid-normalized score is below `SETTINGS.rerank_routing_threshold`,
+return a fallback message so Claude calls `web_search` next.
 """
 from __future__ import annotations
 
 from civicai.config import SETTINGS
-from civicai.rag.embeddings import get_embedder
-from civicai.rag.vectorstore import get_collection
+from civicai.rag.reranker import get_reranker
+from civicai.rag.retrieval import Candidate, retrieve
+
+
+def _format(candidates: list[Candidate]) -> str:
+    return "\n\n---\n\n".join(
+        f"[Source: {c.source} | Score: {round(c.score, 3)}]\n{c.text}"
+        for c in candidates
+    )
+
+
+def _fallback_message(top_score: float) -> str:
+    return (
+        f"Aucun document pertinent trouvé (score top: {round(top_score, 3)}). "
+        "Utilise web_search pour répondre à cette question."
+    )
 
 
 def search_docs(query: str, n_results: int | None = None) -> str:
-    n_results = n_results or SETTINGS.default_n_results
+    """Tool entry point. `n_results` is accepted for back-compat but the
+    retrieve-then-rerank pipeline is driven by config (`retrieve_top_k` and
+    `rerank_top_n`)."""
+    candidates = retrieve(query, k=SETTINGS.retrieve_top_k)
 
-    embedder = get_embedder()
-    collection = get_collection()
+    if not candidates:
+        return _fallback_message(0.0)
 
-    query_embedding = embedder.encode(query).tolist()
-    results = collection.query(
-        query_embeddings=[query_embedding],
-        n_results=n_results,
-        include=["documents", "metadatas", "distances"],
+    reranked = get_reranker().rerank(
+        query, candidates, top_n=SETTINGS.rerank_top_n
     )
 
-    formatted: list[str] = []
-    scores: list[float] = []
-    for doc, meta, dist in zip(
-        results["documents"][0],
-        results["metadatas"][0],
-        results["distances"][0],
-    ):
-        score = round(1 - dist, 3)
-        scores.append(score)
-        formatted.append(f"[Source: {meta['source']} | Score: {score}]\n{doc}")
+    top_score = reranked[0].score  # already a sigmoid-normalized rerank score
+    if top_score < SETTINGS.rerank_routing_threshold:
+        return _fallback_message(top_score)
 
-    average_score = sum(scores) / len(scores)
-
-    if average_score < SETTINGS.similarity_threshold:
-        return (
-            f"Aucun document pertinent trouvé (score moyen: {average_score}). "
-            "Utilise web_search pour répondre à cette question."
-        )
-
-    return "\n\n---\n\n".join(formatted)
+    return _format(reranked)

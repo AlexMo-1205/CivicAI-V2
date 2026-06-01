@@ -14,3 +14,12 @@ wheels/
 
 # Db
 chroma_db/
+
+# macOS
+.DS_Store
+
+# Model cache (HuggingFace)
+.hf_cache/
+
+# Evaluation runs (large, regenerated)
+evals/runs/

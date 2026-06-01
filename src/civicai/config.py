@@ -34,13 +34,21 @@ class Settings:
 
     # Embeddings + vector store
     embed_model: str
+    embed_dim: int
     chunk_size: int
     chunk_overlap: int
+    min_chunk_split_chars: int  # docs at/under this size stay as a single chunk
     collection_name: str
     db_dir: Path
 
+    # Retrieval pipeline
+    retrieve_top_k: int          # dense candidates pulled from Chroma
+    rerank_top_n: int            # kept after cross-encoder rerank
+    reranker_model: str
+
     # RAG routing
-    similarity_threshold: float
+    similarity_threshold: float          # legacy dense-only threshold, kept for back-compat
+    rerank_routing_threshold: float      # top reranked (sigmoid) score below which we fall back to web_search
     default_n_results: int
 
     # External search
@@ -60,13 +68,35 @@ SETTINGS = Settings(
     model="claude-sonnet-4-5",
     max_tokens=4096,
 
-    embed_model="all-MiniLM-L6-v2",
+    # bge-m3: multilingual (100+ languages), 1024-dim dense vectors.
+    # Vectors are L2-normalized and the ChromaDB collection uses cosine space.
+    embed_model="BAAI/bge-m3",
+    embed_dim=1024,
     chunk_size=500,
     chunk_overlap=50,
-    collection_name="civicai",
+    # Short procedural docs (steps + costs + penalties) must stay in one chunk —
+    # splitting orphans the corrective answer from its context.
+    # ~700 tokens at the chars/4 heuristic.
+    min_chunk_split_chars=2800,
+    # Collection name includes the dim so a future model change can't accidentally
+    # mix two embedding spaces in the same collection.
+    collection_name="civicai_bge_m3_1024",
     db_dir=PROJECT_ROOT / "chroma_db",
 
+    retrieve_top_k=40,                   # wide net for the dense recall pass
+    # rerank_top_n bumped 6 -> 8: two adversarial ground-truth facts (penalty
+    # numbers, condo-vs-land distinction) sit at ranks 7-8 after reranking on
+    # a 21-doc corpus, so top_n<8 starves the LLM of the corrective context.
+    rerank_top_n=8,
+    reranker_model="BAAI/bge-reranker-v2-m3",
+
     similarity_threshold=0.5,
+    # Selected by the P3c RAGAS threshold sweep over the eval dataset.
+    # At T=0.67 routing accuracy is 87% with ZERO ungrounded-local errors
+    # (fallback→local = 0). Trade-off favors faithfulness over latency: 9
+    # multi-doc or shallow-score local items are routed to web_search where
+    # the answer is still produced correctly. See evals/runs/p3c_sweep_report_*.md.
+    rerank_routing_threshold=0.67,
     default_n_results=5,
 
     tavily_api_key=_env("TAVILY_API_KEY"),
@@ -102,4 +132,14 @@ Règles :
 - Cite toujours tes sources
 - Si tu n'es pas sûr, dis-le et recommande de consulter un professionnel
 - Réponds dans la langue de l'utilisateur (français ou anglais)
+
+Règle d'ancrage CRITIQUE :
+- Ne donne JAMAIS un chiffre (montant, frais, taux, pourcentage, délai, durée, date,
+  seuil, quota) qui n'apparaît pas littéralement dans le contexte retourné par
+  search_docs ou web_search.
+- Ne complète pas un chiffre manquant avec tes connaissances générales.
+- Si le chiffre précis demandé n'est pas dans le contexte, dis-le clairement
+  (par exemple : « ce montant précis n'est pas dans ma base »), puis réponds sur
+  les éléments qui SONT ancrés. Réponds sur ce qui est ancré, signale uniquement
+  ce qui manque — ne deviens pas évasif sur les parties présentes dans le contexte.
 """

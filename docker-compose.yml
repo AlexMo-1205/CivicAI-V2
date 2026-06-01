@@ -8,3 +8,7 @@ services:
     volumes:
       # Persist the vector store across restarts
       - ./chroma_db:/app/chroma_db
+      # Persist the HuggingFace model cache (bge-m3 + bge-reranker, ~3 GB total).
+      # Downloaded on first start, reused thereafter. Empty dir on host triggers
+      # the download once.
+      - ./.hf_cache:/root/.cache/huggingface
